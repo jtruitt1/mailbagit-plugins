@@ -5,12 +5,14 @@ from mailbagit.derivative import Derivative
 from mailbagit.loggerx import get_logger
 import mailbagit.helper.derivative as derivative
 import mailbagit.helper.common as common
+from bs4 import BeautifulSoup
 
 
 skip_registry = False
 
 try:
     chromes = ["google-chrome", "Google Chrome", "chrome.exe", "chrome"]
+    chromes = ["google-chrome", "chrome.exe", "chrome"]
     chrome = next((c for c in chromes if distutils.spawn.find_executable(c)), None)
     skip_registry = True if chrome is None else False
 
@@ -58,6 +60,55 @@ if not skip_registry:
                     except Exception as e:
                         desc = "Error formatting HTML for PDF derivative"
                         errors = common.handle_error(errors, e, desc)
+
+                    try: 
+                        # Modify the HTML so that the PDF prints to a single page
+                        # The code below is adapted from SDW on stackoverflow
+                        # https://stackoverflow.com/a/52128129
+                        styles = """
+                            <style>
+                            html, body {
+                                width:  fit-content;
+                                height: fit-content;
+                                margin:  0px;
+                                padding: 0px;
+                            }
+                            </style>
+
+                            <!--Set an arbitrary starting page size. This will be changed later by <script>-->
+                            <style id=page_style>
+                            @page { size: 1000px 1000px ; margin : 0px }
+                            </style>
+                            """
+                        script = """
+                            <script>
+                                function fixpage() {
+                                    // Get the height of rendered page in pixels
+                                    const renderBlock = document.getElementsByTagName("html")[0];
+                                    const renderBlockInfo = window.getComputedStyle(renderBlock)
+                                
+                                    // fix chrome page sizing bug
+                                    const fixHeight = parseInt(renderBlockInfo.height) + 1 + "px"   
+
+                                    // Change CSS in <head> so that printing page size is set to render size
+                                    const pageCss = `@page { size: ${renderBlockInfo.width} ${fixHeight} ; margin:0;}`;
+                                    document.getElementById("page_style").innerHTML = pageCss;
+                                }
+                                window.onload = fixpage;
+                            </script>
+                            """
+                        # Add <style/> to end of <head> tag
+                        html_formatted = html_formatted.replace("</head>", styles+"</head>", 1)
+
+                        # Add <script/> to end of <body> tag
+                        html_formatted = html_formatted.replace("</body>", script+"</body>", 1)
+                        
+                        # Confirm that HTML is still valid (BSoup should raise error if not)
+                        soup = BeautifulSoup(html_formatted, "html.parser")
+
+                    except Exception as e:
+                        desc = "Error when modifying HTML to print without pagebreaks"
+                        errors = common.handle_error(erros, e, desc)
 
                     if not self.args.dry_run:
                         try:
