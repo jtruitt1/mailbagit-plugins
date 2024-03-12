@@ -15,6 +15,7 @@ if not exists(args.path):
     quit()
 if not isdir(args.path):
     print("Error:", args.path, "is not a directory")
+    quit()
 
 print("Opening bag at", args.path, "...")
 bag = bagit.Bag(args.path)
